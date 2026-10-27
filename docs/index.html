@@ -465,11 +465,17 @@ function findDuplicates(lead) {
 function setTab(key) { currentTab = key; render(); }
 
 function renderTelemetry() {
-  const flaggedLeads = allLeads.filter(isFlagged);
+  // All three counts deliberately exclude archived leads — archiving
+  // something is how you tell the dashboard "I've dealt with this,"
+  // so a flagged/missed-call lead you've already filed away shouldn't
+  // keep inflating these numbers forever. isFlagged()/isMissedCall()
+  // themselves stay archived-agnostic on purpose (badges on an
+  // archived lead you're actually looking at should still be accurate).
+  const flaggedLeads = allLeads.filter(l => isFlagged(l) && !l.archived);
   const chips = [
     { label: 'Needs response', value: allLeads.filter(l => !l.responded && !l.archived).length, cls: '' },
     { label: 'At risk (est.)', value: '£' + (avgCostPerLead * flaggedLeads.length).toFixed(0), cls: 'danger' },
-    { label: 'Missed calls', value: allLeads.filter(isMissedCall).length, cls: 'warn' },
+    { label: 'Missed calls', value: allLeads.filter(l => isMissedCall(l) && !l.archived).length, cls: 'warn' },
   ];
   document.getElementById('telemetry').innerHTML = chips.map(c =>
     `<div class="telemetry-chip ${c.cls}"><div class="num">${c.value}</div><div class="lbl">${c.label}</div></div>`

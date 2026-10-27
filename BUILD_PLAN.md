@@ -1622,3 +1622,32 @@ combine with the existing tab and search filters (all are AND'd
 together in the same `filtered` computation), so "Booked" + "window
 cleaner" + a phone-number search all narrow together correctly.
 Synced to `docs/index.html`.
+
+## Telemetry chips explained, a real archived-filtering bug found and fixed — 2026-10-27
+
+User asked what the three top-bar stats (Needs response / At risk /
+Missed calls) actually track and whether they're the right ones.
+Walked through the exact logic (`!responded && !archived`; average
+cost-per-charged-lead × flagged-lead count; `call_duration_millis = 0`)
+and noticed while checking that only "Needs response" excluded
+archived leads — "At risk" and "Missed calls" didn't, so anything
+already archived would keep inflating those two forever.
+
+**Real false alarm first**: user reported "Needs response" not moving
+after archiving ~165 leads. Checked the real data directly rather than
+assume a bug — the archive had genuinely landed (165/181 archived) and
+the correct live count really was 12; the number shown was just a
+stale, unrefreshed page (this dashboard loads leads once at open, no
+polling/realtime). Confirmed by the user after a real reload.
+
+**Then fixed the actual bug**: `renderTelemetry()`'s "At risk" and
+"Missed calls" now also exclude archived leads, matching "Needs
+response". Deliberately did NOT change `isFlagged()`/`isMissedCall()`
+themselves, since those same functions also drive the FLAGGED/MISSED
+badges on individual leads — an archived lead you're actually looking
+at in the Archived tab should still show accurate badges; only the
+*summary count* should stop including it. Verified the real impact
+before syncing: "At risk" was showing a non-zero figure from 7 flagged
+leads that are now all archived (correct value: 0), "Missed calls" was
+showing 23 that are now all archived (correct value: 0) — a real,
+meaningful bug, not a cosmetic one. Synced to `docs/index.html`.
