@@ -122,6 +122,27 @@
     border-radius: 10px; color: var(--text); font-size: 14px;
   }
 
+  .select-toggle {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 7px 12px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer;
+  }
+  .select-toggle.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+  .bulk-bar {
+    display: none; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  .bulk-bar label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .bulk-bar .bulk-count { font-size: 13px; color: var(--text-muted); }
+  .bulk-bar button {
+    padding: 7px 14px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .bulk-bar button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+  .bulk-bar button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .chat-item-checkbox { flex-shrink: 0; width: 20px; height: 20px; }
+
   /* ---------- Chat list ---------- */
   .chat-list { flex: 1; overflow-y: auto; }
   .chat-item {
@@ -251,11 +272,15 @@
       <div class="topbar">
         <div class="topbar-row">
           <h1 id="business-name"></h1>
-          <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-btn"></button>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button class="select-toggle" onclick="toggleSelectMode()" id="select-toggle-btn">Select</button>
+            <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-btn"></button>
+          </div>
         </div>
         <div class="telemetry" id="telemetry"></div>
       </div>
       <div class="chips" id="chips"></div>
+      <div class="bulk-bar" id="bulk-bar"></div>
       <div class="search-row">
         <input id="search" type="text" placeholder="Search phone or message" oninput="render()">
       </div>
@@ -306,6 +331,8 @@ let business = null;
 let avgCostPerLead = 0;
 let currentTab = 'new';
 let selectedLeadId = null;
+let selectMode = false;
+let selectedIds = new Set();
 
 const BOOKED_STALE_DAYS = 14;
 
@@ -377,6 +404,11 @@ function formatCategory(categoryId) {
   return categoryId.replace('xcat:service_area_business_', '').replace(/_/g, ' ');
 }
 
+function formatService(serviceId) {
+  if (!serviceId) return '-';
+  return serviceId.replace(/_/g, ' ');
+}
+
 function avatarIcon(l) { return l.lead_type === 'PHONE_CALL' ? ICONS.phone : ICONS.message; }
 
 function formatTime(dateStr) {
@@ -434,6 +466,8 @@ function render() {
     return true;
   });
 
+  renderBulkBar(filtered.map(l => l.id));
+
   const list = document.getElementById('chat-list');
   if (!filtered.length) {
     list.innerHTML = '<div class="empty-state">No leads here</div>';
@@ -446,8 +480,12 @@ function render() {
     if (isMissedCall(l)) badges.push('<span class="badge missed">MISSED</span>');
     if (isFlagged(l)) badges.push('<span class="badge flagged">FLAGGED</span>');
     if (l.booked_job_date) badges.push(`<span class="badge job-date">Job: ${formatDate(l.booked_job_date)}</span>`);
+    const checkbox = selectMode
+      ? `<input type="checkbox" class="chat-item-checkbox" ${selectedIds.has(l.id) ? 'checked' : ''} onclick="event.stopPropagation(); toggleLeadSelection('${l.id}')">`
+      : '';
     return `
-      <div class="chat-item ${!l.responded ? 'unread' : ''} ${l.id === selectedLeadId ? 'selected' : ''}" onclick="openLeadDetail('${l.id}')">
+      <div class="chat-item ${!l.responded ? 'unread' : ''} ${l.id === selectedLeadId ? 'selected' : ''}" onclick="${selectMode ? `toggleLeadSelection('${l.id}')` : `openLeadDetail('${l.id}')`}">
+        ${checkbox}
         <div class="avatar ${l.lead_type === 'PHONE_CALL' ? 'call' : 'message'}">${avatarIcon(l)}</div>
         <div class="chat-item-body">
           <div class="chat-item-top">
@@ -457,9 +495,55 @@ function render() {
           <div class="chat-item-preview">${escapeHtml(preview)}</div>
           ${badges.length ? '<div class="chat-item-badges">' + badges.join('') + '</div>' : ''}
         </div>
-        ${!l.responded ? '<div class="unread-dot"></div>' : ''}
+        ${!l.responded && !selectMode ? '<div class="unread-dot"></div>' : ''}
       </div>`;
   }).join('');
+}
+
+function renderBulkBar(filteredIds) {
+  const bar = document.getElementById('bulk-bar');
+  if (!selectMode) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  const allSelected = filteredIds.length > 0 && filteredIds.every(id => selectedIds.has(id));
+  bar.innerHTML = `
+    <label>
+      <input type="checkbox" ${allSelected ? 'checked' : ''} onchange='toggleSelectAllVisible(${JSON.stringify(filteredIds)})'>
+      <span class="bulk-count">${selectedIds.size} selected</span>
+    </label>
+    <button class="primary" ${selectedIds.size ? '' : 'disabled'} onclick="bulkArchiveSelected()">Archive</button>
+  `;
+}
+
+function toggleSelectMode() {
+  selectMode = !selectMode;
+  selectedIds.clear();
+  const btn = document.getElementById('select-toggle-btn');
+  btn.textContent = selectMode ? 'Cancel' : 'Select';
+  btn.classList.toggle('active', selectMode);
+  render();
+}
+
+function toggleLeadSelection(id) {
+  if (selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+  render();
+}
+
+function toggleSelectAllVisible(filteredIds) {
+  const allSelected = filteredIds.every(id => selectedIds.has(id));
+  if (allSelected) filteredIds.forEach(id => selectedIds.delete(id));
+  else filteredIds.forEach(id => selectedIds.add(id));
+  render();
+}
+
+async function bulkArchiveSelected() {
+  if (!selectedIds.size) return;
+  const ids = Array.from(selectedIds);
+  await _db.from('leads').update({ archived: true }).in('id', ids);
+  ids.forEach(id => {
+    const lead = allLeads.find(l => l.id === id);
+    if (lead) lead.archived = true;
+  });
+  toggleSelectMode();
 }
 
 async function toggleResponded(id, current) {
@@ -618,6 +702,10 @@ async function openLeadDetail(id) {
       <button class="compose-send" id="compose-send-btn" onclick="sendReply('${lead.id}')">${ICONS.send}</button>
     </div>
     <div class="detail-fields">
+      <div class="field">
+        <div class="field-label">Service type</div>
+        <div class="field-value">${escapeHtml(formatService(lead.service_id))}</div>
+      </div>
       <div class="field">
         <div class="field-label">Google's raw status (their site may show something different — e.g. Archive/Completed aren't in this API)</div>
         <div class="field-value">${lead.lead_status}</div>

@@ -1528,3 +1528,70 @@ the test (doesn't depend on the Google send succeeding, by design),
 so a real "Missed call from +10000000001" email landed in the
 business's actual inbox — flagged to the user as test fallout, not a
 real lead.
+
+## Tagged quote-form link + "form received" return ping — built 2026-10-25, NOT YET DEPLOYED
+
+**Problem found**: `send-followups` nudges any MESSAGE lead with `responded = false` 24h after the auto-reply ("just checking in on your enquiry…"). `responded` is only ever set by someone replying inside this Companion. When a customer follows the auto-reply's `book.html` link and fills in the form, the business then deals with them in its own system — so the Companion would still nudge someone who already had a quote coming.
+
+**Built (code + migration written, tested locally, nothing deployed from here)**:
+- `migrations/2026-10-25_form_submitted_at.sql` — `leads.form_submitted_at timestamptz` (nullable, existing rows untouched).
+- `supabase/functions/form-received/index.ts` — server-to-server endpoint (deploy with `--no-verify-jwt`; self-authenticates with a shared secret in the `x-companion-secret` header, constant-time compare, fails closed if `FORM_RECEIVED_SECRET` isn't set). Takes `{ lsa_lead_id }` (must be a uuid), sets `responded = true` + `form_submitted_at = now()`, idempotent (repeat ping changes nothing), 404 on unknown id. Knows nothing about Vertex's schema — it's a generic "the customer completed the follow-up step" signal, consistent with the standing "CRM integration optional, tool stays general-purpose" rule.
+- `auto-reply` and `missed-call-handler`: the quote-form link is now per-lead — `https://vertexcare.co.uk/book.html?lsa=<this lead's leads.id>` — still at the very end of the message (iOS link-preview rule from the earlier link-rendering entry). The id is this table's own random uuid, not a Google id; no personal details in the URL. (The Vertex URL is still hardcoded in both files, same as before — a known multi-tenant gap, unchanged by this work.)
+
+**Verified locally (no Deno on this machine, so by running the real code under Node with stubs)**: form-received against an in-memory stand-in for `leads` — 405 on GET, 401 with no/wrong secret, 400 on bad JSON / non-uuid id (incl. an injection-looking string), 404 unknown lead, 200 marked on first ping (responded + timestamp set), 200 "already recorded" on repeat with the timestamp unchanged, 500 fail-closed with no server secret. Both templates, open and after-hours: each lead gets its own link, URL last. The Supabase query semantics (`update … .is('form_submitted_at', null) … select`) were exercised only against the stand-in, NOT a real database — first real ping is the true test. Also caught during this work: a first pass left a stale `text` reference in `missed-call-handler`'s response that would have thrown at runtime (a syntax-only check passes it) — fixed and re-tested.
+
+**Deploy order matters (the other half lives in Vertex's CRM project)**:
+1. Vertex side first (already done/ready): CRM column `enquiries.lsa_lead_id` ✓ applied; updated `book.html` uploaded to the live site; `lead-ack` v8 deployed ✓.
+2. Here: apply the migration; `supabase functions deploy form-received --no-verify-jwt`; `supabase secrets set FORM_RECEIVED_SECRET=<secret>`.
+3. On Vertex's CRM project set the matching `COMPANION_FORM_RECEIVED_SECRET` + `COMPANION_FORM_RECEIVED_URL` (= this project's `/functions/v1/form-received`).
+4. Only THEN redeploy `auto-reply` and `missed-call-handler` — that's the moment tagged links start going to real customers.
+5. End-to-end test: invoke Vertex's `lead-ack` with a synthetic payload carrying a real `leads.id`; expect `companionPing: "ok"` and that lead showing `responded = true` + `form_submitted_at`.
+
+**Not built (offered)**: a "Form received" badge in `site/dashboard.html` (would also need syncing to `docs/index.html`).
+
+## Lead-tracking deploy completed, Service type field, bulk archive — 2026-10-25/27
+
+Closes out the Vertex-side lead-tracking work from the entry above —
+this session deployed and verified the LSA Companion half of it, which
+had been written and waiting locally.
+
+**Deployed and verified for real**: `FORM_RECEIVED_SECRET` set (by the
+user directly, never passed through chat), the `form_submitted_at`
+migration run, and `auto-reply`/`missed-call-handler`/`form-received`
+all deployed. Since the real shared secret was never visible to this
+session, verification was split accordingly: confirmed `form-received`
+genuinely rejects bad input for real against the live endpoint (401 on
+wrong secret, 401 on no secret, 405 on wrong HTTP method — notably
+401 rather than the earlier-seen 500 "not configured," confirming the
+secret really is registered and being compared, not just absent), and
+separately confirmed the per-lead tracking link renders correctly
+(`?lsa=<the lead's own uuid>`) by triggering `auto-reply` against a
+synthetic lead and reading the exact link back out of the response.
+The *acceptance* path (`form-received` with the real secret) could not
+be verified by this session by design — handed to the user as a
+one-line `curl` command to run themselves with the real secret, using
+the same synthetic lead so the result could still be checked
+afterward. Synthetic lead deleted once no longer needed.
+
+**Service type field added to the dashboard**. Checked directly
+against a real lead screenshot the user shared (331136391) that
+LSA Companion already captures both the "Business category" Google
+shows (`category_id`, already displayed via `formatCategory()`) and
+"Service type" (`service_id`) — confirmed against the real stored
+value (`exterior_window_cleaning`) that it was being synced correctly
+but never actually rendered anywhere in the UI. Added a matching
+`formatService()` helper and a new field in the lead detail panel.
+Synced to `docs/index.html`.
+
+**Bulk archive built**. A "Select" toggle in the top bar switches the
+list into multi-select mode — checkboxes per lead, a "select all
+visible" checkbox scoped to the current tab/search filter (not all
+leads globally), a live selected-count, and a single "Archive" button
+that updates every selected lead's `archived` field in one Supabase
+call. Verified the actual bulk-write call for real against three
+synthetic leads (never real Vertex data) — confirmed all three flipped
+`archived: true` in a single `.update().in('id', [...])` call, proving
+no special RLS/grant issue, same as every other per-lead field in this
+dashboard. Synced to `docs/index.html`. Full click-through verification
+still wasn't possible (login still off-limits to this session), same
+limitation as the Job date and webhook-export features earlier.

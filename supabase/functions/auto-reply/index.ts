@@ -25,11 +25,20 @@ import { getAccessToken } from '../_shared/google-ads.ts'
 const MAX_LEAD_AGE_HOURS = 24
 const BUSINESS_TIMEZONE = 'Europe/London' // see note above — hardcoded until a real per-business field exists
 
-const TEMPLATE =
-  "Thanks for reaching out! We've received your message and will get back to you shortly. While you wait, feel free to fill in our quick quote form: https://vertexcare.co.uk/book.html"
+// Per-lead link (2026-10-25): the quote-form link now carries THIS lead's own
+// id (?lsa=<uuid>) so Vertex's book.html can tag the enquiry with it and ping
+// the form-received function when the form is filled in — which stops the
+// 24h follow-up nudge. The id is the Companion's own random uuid, not a Google
+// id, and no personal details travel in the link. URL stays at the very end of
+// the message on purpose (iOS only renders a link preview card for a URL at the
+// start or end).
+const bookingLink = (leadId: string) => `https://vertexcare.co.uk/book.html?lsa=${leadId}`
 
-const AFTER_HOURS_TEMPLATE =
-  "Thanks for reaching out! We're currently closed — we've received your message and will get back to you when we reopen. While you wait, feel free to fill in our quick quote form: https://vertexcare.co.uk/book.html"
+const TEMPLATE = (leadId: string) =>
+  `Thanks for reaching out! We've received your message and will get back to you shortly. While you wait, feel free to fill in our quick quote form: ${bookingLink(leadId)}`
+
+const AFTER_HOURS_TEMPLATE = (leadId: string) =>
+  `Thanks for reaching out! We're currently closed — we've received your message and will get back to you when we reopen. While you wait, feel free to fill in our quick quote form: ${bookingLink(leadId)}`
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -47,10 +56,10 @@ function currentHourInTimezone(timeZone: string): number {
   return parseInt(hourStr, 10)
 }
 
-function generateReply(business: { business_hours_start: number; business_hours_end: number }): string {
+function generateReply(business: { business_hours_start: number; business_hours_end: number }, leadId: string): string {
   const hour = currentHourInTimezone(BUSINESS_TIMEZONE)
   const isAfterHours = !(hour >= business.business_hours_start && hour < business.business_hours_end)
-  return isAfterHours ? AFTER_HOURS_TEMPLATE : TEMPLATE
+  return isAfterHours ? AFTER_HOURS_TEMPLATE(leadId) : TEMPLATE(leadId)
 }
 
 async function sendConversation(
@@ -124,13 +133,15 @@ Deno.serve(async (req) => {
       Deno.env.get('GOOGLE_CLIENT_SECRET')!,
     )
     const customerId = business.google_ads_customer_id.replace(/-/g, '')
-    const text = generateReply(business)
+    let lastText = ''
 
     let repliedTo = 0
     const failures: { lead_id: number; error: unknown }[] = []
 
     for (const lead of candidates) {
       const leadResourceName = `customers/${customerId}/localServicesLeads/${lead.google_lead_id}`
+      const text = generateReply(business, lead.id)
+      lastText = text
       const result = await sendConversation(customerId, leadResourceName, text, accessToken)
       if (result.ok) {
         await supabase
@@ -143,7 +154,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    return jsonResponse({ repliedTo, failed: failures.length, failures, template: text })
+    return jsonResponse({ repliedTo, failed: failures.length, failures, template: lastText })
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500)
   }

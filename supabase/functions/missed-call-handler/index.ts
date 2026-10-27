@@ -28,11 +28,15 @@ import { sendEmail } from '../_shared/resend.ts'
 const MAX_LEAD_AGE_HOURS = 24
 const BUSINESS_TIMEZONE = 'Europe/London' // same hardcoded-until-per-business-field limitation as auto-reply
 
-const TEMPLATE =
-  "Sorry we missed your call! We'll call you back as soon as we can. While you wait, feel free to fill in our quick quote form: https://vertexcare.co.uk/book.html"
+// Per-lead link — see the matching note in auto-reply/index.ts (same tag,
+// same reason). URL kept at the very end of the message.
+const bookingLink = (leadId: string) => `https://vertexcare.co.uk/book.html?lsa=${leadId}`
 
-const AFTER_HOURS_TEMPLATE =
-  "Sorry we missed your call! We're currently closed — we'll call you back when we reopen. While you wait, feel free to fill in our quick quote form: https://vertexcare.co.uk/book.html"
+const TEMPLATE = (leadId: string) =>
+  `Sorry we missed your call! We'll call you back as soon as we can. While you wait, feel free to fill in our quick quote form: ${bookingLink(leadId)}`
+
+const AFTER_HOURS_TEMPLATE = (leadId: string) =>
+  `Sorry we missed your call! We're currently closed — we'll call you back when we reopen. While you wait, feel free to fill in our quick quote form: ${bookingLink(leadId)}`
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -50,10 +54,10 @@ function currentHourInTimezone(timeZone: string): number {
   return parseInt(hourStr, 10)
 }
 
-function generateText(business: { business_hours_start: number; business_hours_end: number }): string {
+function generateText(business: { business_hours_start: number; business_hours_end: number }, leadId: string): string {
   const hour = currentHourInTimezone(BUSINESS_TIMEZONE)
   const isAfterHours = !(hour >= business.business_hours_start && hour < business.business_hours_end)
-  return isAfterHours ? AFTER_HOURS_TEMPLATE : TEMPLATE
+  return isAfterHours ? AFTER_HOURS_TEMPLATE(leadId) : TEMPLATE(leadId)
 }
 
 async function sendConversation(
@@ -128,8 +132,8 @@ Deno.serve(async (req) => {
         customerId = business.google_ads_customer_id.replace(/-/g, '')
       }
     }
-    const text = generateText(business)
 
+    let lastText = ''
     let handled = 0
     const textFailures: { lead_id: number; error: unknown }[] = []
 
@@ -137,6 +141,8 @@ Deno.serve(async (req) => {
       let textResult: { ok: boolean; detail: unknown } = { ok: false, detail: 'no access token available' }
       if (accessToken && customerId) {
         const leadResourceName = `customers/${customerId}/localServicesLeads/${lead.google_lead_id}`
+        const text = generateText(business, lead.id)
+        lastText = text
         textResult = await sendConversation(customerId, leadResourceName, text, accessToken)
       }
       if (!textResult.ok) textFailures.push({ lead_id: lead.google_lead_id, error: textResult.detail })
@@ -156,7 +162,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    return jsonResponse({ handled, textFailed: textFailures.length, textFailures, template: text })
+    return jsonResponse({ handled, textFailed: textFailures.length, textFailures, template: lastText })
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500)
   }
