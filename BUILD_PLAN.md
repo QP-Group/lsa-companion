@@ -1595,3 +1595,30 @@ no special RLS/grant issue, same as every other per-lead field in this
 dashboard. Synced to `docs/index.html`. Full click-through verification
 still wasn't possible (login still off-limits to this session), same
 limitation as the Job date and webhook-export features earlier.
+
+## Category/service filters added — 2026-10-27
+
+User reported Business category "not showing" after the field-labeling
+fix above — turned out the data and `formatCategory()` were both fine
+(confirmed again: 181/181 leads carry a `category_id`), it was genuinely
+just visually easy to miss in a small unlabeled subtitle, fixed by the
+entry directly above this one. That investigation led into this
+request: filter the lead list by category/service type, not just view
+them per-lead.
+
+**Checked the real distribution before building anything**: 2 distinct
+business categories (`cleaning_service`: 38, `window_cleaner`: 143) and
+12 distinct service types (`exterior_window_cleaning`: 37,
+`standard_clean`: 15, `oven_cleaning`: 6, plus several with single-digit
+counts; `service_id` is null on ~105 leads, mostly phone calls) — real
+variety worth a dropdown filter, not a guess.
+
+**Built**: two `<select>` dropdowns (Business category, Service type)
+next to the search box, populated once at load from the actual distinct
+values present in `allLeads` (not a hardcoded list — stays correct as
+real data changes), displayed through the same `formatCategory()`/
+`formatService()` prettifiers already used elsewhere. Both filters
+combine with the existing tab and search filters (all are AND'd
+together in the same `filtered` computation), so "Booked" + "window
+cleaner" + a phone-number search all narrow together correctly.
+Synced to `docs/index.html`.

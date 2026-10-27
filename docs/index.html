@@ -122,6 +122,12 @@
     border-radius: 10px; color: var(--text); font-size: 14px;
   }
 
+  .filter-row { display: flex; gap: 8px; padding: 0 16px 10px; }
+  .filter-row select {
+    flex: 1; min-width: 0; padding: 8px 10px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text); font-size: 13px;
+  }
+
   .select-toggle {
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
     padding: 7px 12px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer;
@@ -284,6 +290,14 @@
       <div class="search-row">
         <input id="search" type="text" placeholder="Search phone or message" oninput="render()">
       </div>
+      <div class="filter-row">
+        <select id="category-filter" onchange="categoryFilter = this.value; render()">
+          <option value="">All categories</option>
+        </select>
+        <select id="service-filter" onchange="serviceFilter = this.value; render()">
+          <option value="">All services</option>
+        </select>
+      </div>
       <div class="chat-list" id="chat-list"></div>
     </div>
     <div class="detail-panel" id="detail-panel">
@@ -333,6 +347,8 @@ let currentTab = 'new';
 let selectedLeadId = null;
 let selectMode = false;
 let selectedIds = new Set();
+let categoryFilter = '';
+let serviceFilter = '';
 
 const BOOKED_STALE_DAYS = 14;
 
@@ -375,6 +391,7 @@ async function init() {
 
   await loadLeads();
   await loadCostEstimate();
+  populateFilterOptions();
   render();
 }
 
@@ -407,6 +424,19 @@ function formatCategory(categoryId) {
 function formatService(serviceId) {
   if (!serviceId) return '-';
   return serviceId.replace(/_/g, ' ');
+}
+
+function populateFilterOptions() {
+  const categories = [...new Set(allLeads.map(l => l.category_id).filter(Boolean))].sort();
+  const services = [...new Set(allLeads.map(l => l.service_id).filter(Boolean))].sort();
+
+  const categorySelect = document.getElementById('category-filter');
+  categorySelect.innerHTML = '<option value="">All categories</option>' +
+    categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(formatCategory(c))}</option>`).join('');
+
+  const serviceSelect = document.getElementById('service-filter');
+  serviceSelect.innerHTML = '<option value="">All services</option>' +
+    services.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(formatService(s))}</option>`).join('');
 }
 
 function avatarIcon(l) { return l.lead_type === 'PHONE_CALL' ? ICONS.phone : ICONS.message; }
@@ -463,6 +493,8 @@ function render() {
   const filtered = allLeads.filter(l => {
     if (!activeTab.match(l)) return false;
     if (search && !(l.contact_phone || '').toLowerCase().includes(search) && !(l.message_text || '').toLowerCase().includes(search)) return false;
+    if (categoryFilter && l.category_id !== categoryFilter) return false;
+    if (serviceFilter && l.service_id !== serviceFilter) return false;
     return true;
   });
 
