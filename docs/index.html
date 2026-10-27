@@ -703,6 +703,10 @@ async function openLeadDetail(id) {
     </div>
     <div class="detail-fields">
       <div class="field">
+        <div class="field-label">Business category</div>
+        <div class="field-value">${escapeHtml(formatCategory(lead.category_id))}</div>
+      </div>
+      <div class="field">
         <div class="field-label">Service type</div>
         <div class="field-value">${escapeHtml(formatService(lead.service_id))}</div>
       </div>
