@@ -89,7 +89,8 @@ async function syncConversations(supabase: any, accessToken: string, opts: any, 
       local_services_lead_conversation.participant_type,
       local_services_lead_conversation.event_date_time,
       local_services_lead_conversation.phone_call_details.call_duration_millis,
-      local_services_lead_conversation.message_details.text
+      local_services_lead_conversation.message_details.text,
+      local_services_lead_conversation.message_details.attachment_urls
     FROM local_services_lead_conversation
   `
   const rows = await gaqlSearch({ ...opts, accessToken, query })
@@ -123,6 +124,7 @@ async function syncConversations(supabase: any, accessToken: string, opts: any, 
         participant_type: conv.participantType,
         channel: conv.conversationChannel,
         text: conv.messageDetails?.text || null,
+        attachment_urls: conv.messageDetails?.attachmentUrls?.length ? conv.messageDetails.attachmentUrls : null,
         event_date_time: conv.eventDateTime ? conv.eventDateTime.split('.')[0] : null,
       })
     }

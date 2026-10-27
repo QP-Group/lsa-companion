@@ -1651,3 +1651,92 @@ before syncing: "At risk" was showing a non-zero figure from 7 flagged
 leads that are now all archived (correct value: 0), "Missed calls" was
 showing 23 that are now all archived (correct value: 0) — a real,
 meaningful bug, not a cosmetic one. Synced to `docs/index.html`.
+
+## First real message since the outage fix, auto-reply pipeline confirmed end-to-end — 2026-10-27
+
+User reported a genuine new message lead had come in. Checked it
+directly rather than take the report at face value: `google_lead_id
+348461316`, `lead_type MESSAGE`, arrived `2026-10-27T11:46:50Z`.
+
+Confirmed from the real row, not assumed:
+- `auto_reply_sent = true`, `auto_reply_sent_at = 11:52:02Z` — about
+  5-6 minutes after the lead landed, matching the tightened `*/5`
+  sync + `2-57/5` auto-reply cadence set up after the OAuth outage.
+- `alert_sent = true` — the business-alert email also fired.
+- `responded = true` — the lead correctly drops out of "Needs
+  response" without any manual action.
+- `category_id = xcat:service_area_business_window_cleaner`,
+  `service_id = null` for this one (Google doesn't always populate
+  service_id — category isn't guaranteed to come with it).
+
+This is the first real-world lead to go through the whole chain built
+and fixed this session: fresh OAuth token → 5-minute sync → auto-reply
+with the per-lead booking link → business alert. All four stages
+fired correctly on a genuine customer message, not a synthetic test.
+
+Still unverified: what the customer's phone actually displayed (did
+the booking link render as a tappable link in the SMS/email they
+received) — that requires either the customer's own view or checking
+the conversation thread in Google's own LSA interface, neither of
+which I have access to. `form_submitted_at` is still null across every
+lead in the table, so the `form-received` accept path has still never
+fired for real.
+
+## Picture attachments on messages — built, not yet live-tested — 2026-10-27
+
+User asked whether a lead sending a photo would show up in the tool.
+Checked rather than guessed: confirmed directly against Google's own
+v25 field reference that `local_services_lead_conversation
+.message_details.attachment_urls` exists (repeated string, output-
+only) — Google does track it — but our GAQL query never selected it,
+`conversation_messages` had no column for it, and the dashboard's
+thread renderer only ever emitted escaped text. Three gaps stacked on
+top of a real Google capability we just weren't using.
+
+**Built:**
+- `migrations/2026-10-27_conversation_attachments.sql` — adds
+  `conversation_messages.attachment_urls text[]`, nullable.
+- `sync-business/index.ts` — GAQL query now also selects
+  `message_details.attachment_urls`; `syncConversations()` stores it
+  (null when empty, never an empty array).
+- New `get-attachment` Edge Function — proxies the actual image bytes.
+  Needed because Google's attachment URLs require an authorized OAuth
+  credential to download, and the browser only ever holds a Supabase
+  session, never a Google token. Same auth pattern as `send-reply`:
+  verify the caller's Supabase JWT, look up `business_members` to
+  confirm they actually belong to the message's business, exchange the
+  stored refresh token for a Google access token via
+  `get_refresh_token`, then fetch the attachment with that token
+  (sending both `Authorization: Bearer` and the `developer-token`
+  header, since the exact requirement is ambiguous — see below).
+- Dashboard thread rendering now emits a loading placeholder per
+  attachment, and a new `hydrateAttachments()` loads each one via an
+  authenticated `fetch()` (an `<img src>` can't carry an auth header),
+  swapping in a real `<img>` pointing at a local blob URL on success,
+  or "Image unavailable" text on failure. Synced to `docs/index.html`
+  (diffed first — only the intended lines differed).
+
+**Genuinely unverified, flagged honestly rather than glossed over:**
+Google's v25 docs describe the download auth as "authorized Google
+Cloud project credentials" — vaguer than older API versions, which
+said plainly "the developer token." Nobody has sent a picture through
+this pipeline yet, so neither the GAQL field (does it actually come
+back populated) nor the download auth (does our access token, or the
+developer-token header, actually work against that URL) has been
+tested against anything real. Checked JS syntax only (`node --check`
+on the extracted inline script — passed); could not run the TypeScript
+Edge Function locally (no `deno` installed) or exercise the real login
+flow (would mean entering the business's real password, which I won't
+do). The first real photo a lead sends is the actual test — check the
+Edge Function's logs if an image doesn't load, the error detail is
+deliberately passed through rather than swallowed.
+
+**Deployed**: migration ran (first attempt went into the wrong
+Supabase project — easy mix-up with two separate projects in play,
+re-ran in the right one), `get-attachment` deployed. Verified directly
+rather than taken on trust: `conversation_messages.attachment_urls`
+confirmed present via a real REST query (returns `null` on existing
+rows, as expected), and the deployed function correctly 401s with no
+auth header — confirms it's gated the same way as `send-reply`, not
+left wide open. Still waiting on a real picture message to prove the
+actual download path end to end.

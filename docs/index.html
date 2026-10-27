@@ -212,6 +212,15 @@
   .bubble-row.us .bubble { background: var(--accent); color: white; border-bottom-right-radius: 4px; }
   .bubble-time { font-size: 10px; color: var(--text-muted); margin-top: 2px; padding: 0 4px; }
   .call-event { align-self: center; font-size: 12px; color: var(--text-muted); background: var(--surface); padding: 6px 12px; border-radius: 10px; }
+  .attachment-img {
+    display: block; max-width: 220px; max-height: 220px; border-radius: 12px; margin-top: 6px;
+    background: var(--surface); object-fit: cover; cursor: pointer;
+  }
+  .attachment-placeholder {
+    display: flex; align-items: center; justify-content: center; width: 160px; height: 120px;
+    border-radius: 12px; margin-top: 6px; background: var(--surface); color: var(--text-muted);
+    font-size: 12px; text-align: center; padding: 8px;
+  }
 
   .compose-bar {
     display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border);
@@ -324,8 +333,9 @@ const ICONS = {
   send: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>',
 };
 
-// Edge Function URL — same project ref as SUPABASE_URL above.
+// Edge Function URLs — same project ref as SUPABASE_URL above.
 const SEND_REPLY_URL = SUPABASE_URL + '/functions/v1/send-reply';
+const GET_ATTACHMENT_URL = SUPABASE_URL + '/functions/v1/get-attachment';
 
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
@@ -716,7 +726,11 @@ async function openLeadDetail(id) {
         return `<div class="call-event">${ICONS.phone} Phone call${m.text ? '' : ' (missed)'} — ${formatTime(m.event_date_time)}</div>`;
       }
       const side = m.participant_type === 'CONSUMER' ? 'them' : 'us';
-      return `<div class="bubble-row ${side}"><div><div class="bubble">${escapeHtml(m.text)}</div><div class="bubble-time">${formatTime(m.event_date_time)}</div></div></div>`;
+      const textHtml = m.text ? `<div class="bubble">${escapeHtml(m.text)}</div>` : '';
+      const attachmentsHtml = (m.attachment_urls || []).map((_, idx) =>
+        `<div class="attachment-placeholder" data-message-id="${m.id}" data-index="${idx}">Loading image…</div>`
+      ).join('');
+      return `<div class="bubble-row ${side}"><div>${textHtml}${attachmentsHtml}<div class="bubble-time">${formatTime(m.event_date_time)}</div></div></div>`;
     }).join('');
   } else {
     threadHtml = '<div class="empty-state">No conversation history</div>';
@@ -775,6 +789,42 @@ async function openLeadDetail(id) {
       <button class="action-btn disabled" title="Pending: ProvideLeadFeedback compliance question not yet resolved" disabled>Raise dispute (pending)</button>
     </div>
   `;
+
+  hydrateAttachments();
+}
+
+// Attachment images need an authorized Google token to fetch (see
+// get-attachment Edge Function) — an <img src="..."> can't carry that
+// auth header, so each placeholder is loaded via an authenticated
+// fetch and swapped for a real <img> pointing at a local blob URL.
+async function hydrateAttachments() {
+  const placeholders = document.querySelectorAll('.attachment-placeholder');
+  if (!placeholders.length) return;
+
+  const { data: { session } } = await _db.auth.getSession();
+
+  for (const el of placeholders) {
+    const messageId = el.dataset.messageId;
+    const index = el.dataset.index;
+    try {
+      const response = await fetch(`${GET_ATTACHMENT_URL}?message_id=${messageId}&index=${index}`, {
+        headers: {
+          'Authorization': 'Bearer ' + session.access_token,
+          'apikey': SUPABASE_ANON_KEY,
+        },
+      });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const blob = await response.blob();
+      const img = document.createElement('img');
+      img.className = 'attachment-img';
+      img.src = URL.createObjectURL(blob);
+      img.alt = 'Attachment';
+      img.onclick = () => window.open(img.src, '_blank');
+      el.replaceWith(img);
+    } catch (err) {
+      el.textContent = 'Image unavailable';
+    }
+  }
 }
 </script>
 </body>
