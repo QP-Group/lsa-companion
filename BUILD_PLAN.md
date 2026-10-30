@@ -1740,3 +1740,55 @@ rows, as expected), and the deployed function correctly 401s with no
 auth header — confirms it's gated the same way as `send-reply`, not
 left wide open. Still waiting on a real picture message to prove the
 actual download path end to end.
+
+## Second OAuth-token outage, same root cause, caught fast this time — 2026-10-30
+
+User asked "is LSA tool still working." Checked rather than assumed, and
+the answer was no.
+
+**What happened**: `leads.synced_at` had been frozen since
+2026-10-29T14:05 UTC — confirmed via `pipeline_health_status`, which had
+correctly flagged every check since 2026-10-29T14:20 UTC as unhealthy
+(the healthy→unhealthy transition row), meaning the alert email to
+`OPERATOR_ALERT_EMAIL` should have fired right then. The monitoring built
+on 2026-10-22 worked exactly as designed — this is the first real proof
+of that, not just the "healthy path" verified back then.
+
+**Root cause, confirmed directly against Google again, not assumed from
+the Oct 22 history**: exchanging the stored refresh token returned
+`invalid_grant — Token has been expired or revoked`. This is the exact
+same failure as the Oct 22 incident, for the exact same reason flagged
+as an open risk at the time and never resolved: the OAuth consent screen
+is still in **Testing** publishing status, and Google expires Testing-mode
+refresh tokens after exactly 7 days regardless of usage. The token
+renewed on 2026-10-22/23 died almost exactly 7 days later, 2026-10-29.
+This will keep recurring on a ~7-day cycle until the app moves to
+Production.
+
+**Fixed and independently verified, same discipline as last time**:
+1. Ran `get_refresh_token.py` in the background; user completed the real
+   Google sign-in/consent themselves.
+2. New refresh token read programmatically from the script's own output
+   file — never pasted into chat by either side.
+3. Looked up the Vault secret's id (`vertex_refresh_token`,
+   `f60eb9e5-8572-4e50-8b28-dc96f1772822`) via a read-only query (name
+   only, no secret value), then updated it with `vault.update_secret()`
+   via `supabase db query --linked --file`, and updated `scripts/.env`'s
+   `REFRESH_TOKEN` the same way. Plaintext output file deleted
+   immediately after.
+4. Verified the new token works against Google directly, independent of
+   our own code: real `200`, fresh access token.
+5. Then triggered the real deployed `sync-business` function (not just
+   the direct-API check) and confirmed it for real: `184` leads, `334`
+   messages, fresh `synced_at` landed at `2026-10-30T16:05:01Z` —
+   essentially live at the moment of the check.
+
+**Not yet resolved — same gap as Oct 22, now hit twice**: the consent
+screen is still in Testing. User tried to switch it to Production during
+this session and hit a real blocker — Google requires a valid app name,
+support email, homepage URL, and privacy policy URL on the Branding page
+before "Publish app" is enabled, and the homepage/privacy-policy URL
+requirement is itself blocked on the still-unresolved dashboard hosting
+problem (GitHub Pages 404ing since the repo went private — see the
+hosting discussion elsewhere in this session). Until that's resolved,
+this exact outage will keep recurring roughly weekly.
