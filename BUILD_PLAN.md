@@ -1792,3 +1792,56 @@ requirement is itself blocked on the still-unresolved dashboard hosting
 problem (GitHub Pages 404ing since the repo went private — see the
 hosting discussion elsewhere in this session). Until that's resolved,
 this exact outage will keep recurring roughly weekly.
+
+## Chat replies to the owner's lead channel + new follow-up wording — built 2026-11-02, NOT YET DEPLOYED
+
+Owner approvals (QP Operations): **#7** follow-up wording, **#8** chat cards. The owner confirmed that
+Google allows automated replies, and that customers' chat messages may appear in the Vertex Leads
+Telegram bot.
+
+**Why:** a customer who replies in the Google chat, instead of using the quote form, got no further
+attention: alerts only cover brand-new leads, and the 24h nudge didn't even repeat the link.
+
+**Follow-ups (send-followups, auto-reply):**
+- First reply now points at the instant price ("You can see your price straight away here (it takes
+  30 seconds), or reply with your postcode and type of home and we'll send it: <link>"), with an
+  after-hours variant. URL kept at the end (iOS previews).
+- 24h reminder now carries the lead's own link.
+- New final message on day 3 (`leads.follow_up_2_sent`): "Still need a hand? Reply with your
+  postcode, the type of home (house, bungalow or flat) and how many bedrooms, and we'll send your price."
+  Worded for any service (LSA leads aren't all window cleaning).
+- Both nudges now skip leads where the form was filled in or the customer has replied in the chat
+  since the auto-reply (that reply goes to the owner as a card instead).
+
+**Chat cards (new chat-cards, chat-reply):**
+- `chat-cards` (cron `lsa-chat-cards`, every 5 minutes, a minute after sync): CONSUMER messages from
+  the last 48h, after the auto-reply, not yet carded → POST to `businesses.chat_card_url` with the
+  shared secret (`CHAT_CARD_SECRET`, header `x-companion-secret`). Sends the lead's Companion id,
+  message id, text, photo count and whether the form was filled in; never the phone number.
+  Marks `conversation_messages.card_sent_at`. Off for any business without `chat_card_url`.
+- `chat-reply` (`--no-verify-jwt`, same secret, constant-time check): sends the text the owner
+  chose through `appendLeadConversation` (checks `partialFailureError`), then marks the lead responded.
+- For Vertex the URL is its CRM's `lead-router/lsa-chat` (stage 47 in QP-Group/vertex-property-care):
+  the card shows the message and a suggested reply from the rate card; the owner taps Send / Write my
+  own / Skip. Nothing reaches a customer without the owner's tap.
+- The migration marks existing customer messages as already carded and older leads' final nudge as
+  sent, so switching on doesn't flood the owner or message old leads.
+
+**Tested (simulated data, 2026-11-02):** chat-cards (only post-auto-reply customer messages, photos-only
+included, no repeats, secret sent); send-followups (24h reminder with link, day-3 message once, skips
+on chat reply and on form filled, not before day 3); chat-reply (401 without secret, Google refusal
+not marked responded, success marks responded). The Vertex side was tested end to end against a local
+Postgres copy with simulated Telegram.
+
+**Deploy (owner, in this order):**
+1. Make one random secret (e.g. `openssl rand -hex 32`). Set it here:
+   `supabase secrets set CHAT_CARD_SECRET=<secret> --project-ref clzzqqwgluazefftvphw`
+   and in Vertex's CRM Vault (SQL editor): `select vault.create_secret('<secret>', 'lsa_chat_secret', 'LSA chat cards');`
+2. Vertex CRM first: run stage 47 and deploy `lead-router --no-verify-jwt` (see that repo's
+   `docs/instant-quote-deploy.md`, "Stage 47").
+3. Here: run `migrations/2026-11-02_chat_cards_and_final_followup.sql`; deploy `auto-reply`,
+   `send-followups` and `chat-cards` as before; deploy `chat-reply --no-verify-jwt`.
+4. Test: reply in the Google chat to a test lead (or wait for a real one); a card should appear in the
+   Vertex Leads bot within about 5 minutes.
+**Undo:** `select cron.unschedule('lsa-chat-cards'); update businesses set chat_card_url = null;` and
+redeploy the previous `auto-reply` / `send-followups` from main.
