@@ -34,11 +34,13 @@ const BUSINESS_TIMEZONE = 'Europe/London' // see note above — hardcoded until 
 // start or end).
 const bookingLink = (leadId: string) => `https://vertexcare.co.uk/book.html?lsa=${leadId}`
 
+// Wording approved by the owner (QP Operations approval #7, 2 Nov 2026): book.html now shows an
+// instant price, and a customer who'd rather reply here is invited to send the details we need.
 const TEMPLATE = (leadId: string) =>
-  `Thanks for reaching out! We've received your message and will get back to you shortly. While you wait, feel free to fill in our quick quote form: ${bookingLink(leadId)}`
+  `Thanks for your message! You can see your price straight away here (it takes 30 seconds), or reply with your postcode and type of home and we'll send it: ${bookingLink(leadId)}`
 
 const AFTER_HOURS_TEMPLATE = (leadId: string) =>
-  `Thanks for reaching out! We're currently closed — we've received your message and will get back to you when we reopen. While you wait, feel free to fill in our quick quote form: ${bookingLink(leadId)}`
+  `Thanks for your message! We're closed right now, but you can see your price straight away here (it takes 30 seconds), or reply with your postcode and type of home and we'll send it when we reopen: ${bookingLink(leadId)}`
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
