@@ -661,9 +661,11 @@ async function sendReply(leadId) {
     const result = await response.json();
 
     if (!response.ok || !result.success) {
-      status.textContent = 'Failed to send: ' + (result.error || 'unknown error');
+      const detail = result.detail ? ' — ' + JSON.stringify(result.detail) : '';
+      status.textContent = 'Failed to send: ' + (result.error || 'unknown error') + detail;
       status.className = 'compose-status error';
       btn.disabled = false;
+      console.error('send-reply failed', result);
       return;
     }
 
