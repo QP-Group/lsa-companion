@@ -1845,3 +1845,69 @@ Postgres copy with simulated Telegram.
    Vertex Leads bot within about 5 minutes.
 **Undo:** `select cron.unschedule('lsa-chat-cards'); update businesses set chat_card_url = null;` and
 redeploy the previous `auto-reply` / `send-followups` from main.
+
+## OAuth consent screen moved to Production — the real fix, not another rotation — 2026-11-09
+
+Closes the gap flagged at the end of the second outage entry above:
+the 7-day refresh-token expiry recurred exactly on schedule (died
+2026-11-06, 7 days after the 10-30 rotation), confirmed via
+`pipeline_health_status` before fixing it properly this time instead
+of just rotating again.
+
+**What was actually blocking Production status**: Google requires a
+homepage URL and privacy policy URL on a domain it can verify you own,
+before the "Publish app" button is even enabled. We had neither — the
+dashboard itself doesn't count as a homepage (it's app UI, not a
+description of the app, and Google explicitly disallows "only a login
+page"), and the hosting was still broken anyway (GitHub Pages 404ing
+on the private repo).
+
+**Built and verified at each step, not just assumed working**:
+1. Repo flipped back to public by the user; confirmed directly
+   (`visibility: PUBLIC`), confirmed no secrets were ever committed
+   (`scripts/.env` and `client_secret.json` are gitignored, `git log`
+   on those paths is empty) before recommending this.
+2. GitHub Pages re-enabled via the API (`main` branch, `/docs`),
+   verified live with a real `200` and real content, not just a
+   "configured" response.
+3. New `docs/about.html` (homepage describing what the product
+   actually does) and `docs/privacy.html` (the existing
+   `PRIVACY_POLICY.md`, rendered as a real page) — user explicitly
+   chose to publish the privacy policy as-is rather than wait for
+   solicitor review, with the draft notice kept visible on the page
+   itself rather than hidden.
+4. Google Search Console domain verification — first attempt failed
+   for a real, specific reason: the verification meta tag was placed
+   on `about.html`, but the verified property is
+   `https://qp-group.github.io/lsa-companion/`, which GitHub Pages
+   serves as `index.html`. Moved the tag to `index.html` (and
+   `site/dashboard.html`, kept in sync), confirmed it was actually
+   being served at the right URL before telling the user to retry —
+   verification then passed.
+5. User filled in the Branding page and clicked Publish app.
+   **Confirmed directly from the console's own response**: Publishing
+   status is now "In production."
+
+**Real uncertainty, resolved by re-testing rather than assuming**: the
+refresh token already in Vault (from the 11-09 rotation) was issued
+*while the app was still in Testing*, before the Production switch.
+One unconfirmed third-party report claimed Testing-issued tokens keep
+their 7-day cap even after the app goes to Production, contradicting
+Google's own docs. Rather than leave that ambiguous, re-ran the OAuth
+flow once more after Production status was confirmed, so the token
+now in Vault was issued under Production specifically. Verified the
+usual way: real `200` from Google directly, then the real deployed
+`sync-business` function run for real (`195` leads, `364` messages,
+fresh `synced_at`).
+
+**Not done, deliberately deferred**: full Google Trust & Safety scope
+verification (demo video + review, per Google's docs typically 3-5
+business days, real-world reports of longer) — not required to fix
+the recurring outage, which was the actual goal here. It matters later
+for removing the "unverified app" warning screen before onboarding a
+second real business, not before.
+
+**Real test still pending**: whether a Production-issued token
+actually survives past 7 days. Won't be fully certain until this is
+checked again after 2026-11-16 and `pipeline_health_status` shows no
+gap — flagged honestly rather than declared solved on theory alone.
