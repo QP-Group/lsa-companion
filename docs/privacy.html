@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Privacy Policy — LSA Companion</title>
+<style>
+  :root {
+    --bg: #0a0a0c;
+    --surface: #17171a;
+    --surface-2: #1f1f23;
+    --border: #2a2a2f;
+    --text: #f2f2f4;
+    --text-muted: #8b8b93;
+    --accent: #0a84ff;
+    --warn: #ff9f0a;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.65;
+  }
+  .wrap {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 48px 20px 80px;
+  }
+  h1 { font-size: 26px; margin: 0 0 8px; }
+  .meta { color: var(--text-muted); font-size: 14px; margin: 0 0 24px; }
+  .draft-notice {
+    background: rgba(255, 159, 10, 0.12);
+    border: 1px solid var(--warn);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 32px;
+    font-size: 14px;
+  }
+  .draft-notice strong { color: var(--warn); }
+  h2 {
+    font-size: 18px;
+    margin: 32px 0 12px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+  }
+  h3 { font-size: 15px; margin: 20px 0 8px; color: var(--text-muted); }
+  p { margin: 0 0 12px; }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 6px; }
+  code {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.9em;
+  }
+  a { color: var(--accent); }
+  .tbd {
+    background: rgba(255, 159, 10, 0.12);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--warn);
+  }
+  footer { margin-top: 40px; }
+  footer a.back { color: var(--text-muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Privacy Policy &mdash; LSA Companion</h1>
+  <p class="meta">Last drafted: 2026-08-20</p>
+
+  <div class="draft-notice">
+    <strong>Status: Draft.</strong> This policy has not yet been reviewed by a
+    solicitor. It is prepared based on the product's actual current schema
+    and infrastructure, and is published here in good faith as an accurate,
+    working description of our data practices while formal legal review is
+    pending. Items marked <span class="tbd">TO CONFIRM</span> are facts or
+    commitments still being finalized.
+  </div>
+
+  <h2>1. Who we are</h2>
+  <p>
+    LSA Companion is operated by <span class="tbd">[YOUR FULL LEGAL NAME] TO CONFIRM</span>,
+    trading as &ldquo;LSA Companion,&rdquo; a sole trader with no separate
+    registered company at this stage. Contact for any privacy matter:
+    <a href="mailto:enpee.sides@gmail.com">enpee.sides@gmail.com</a>.
+  </p>
+
+  <h2>2. What data we process, and in what role</h2>
+  <p>
+    This product has two distinct kinds of personal data, with two different
+    legal relationships attached. Conflating them would misstate our actual
+    obligations, so they're kept separate here.
+  </p>
+
+  <h3>2a. Business account data &mdash; we are the data controller</h3>
+  <p>Data about the businesses (and their staff) who use LSA Companion directly:</p>
+  <ul>
+    <li>Login email address (Supabase Auth)</li>
+    <li>Business name and Google Ads Customer ID</li>
+    <li>Business settings: business hours, alert email, webhook URL if configured</li>
+    <li>The business's own Google Local Services Ads verification/compliance status (e.g. insurance coverage amount and expiry) &mdash; this describes the business itself, not their customers</li>
+  </ul>
+  <p>We process this to provide the service under contract with the business.</p>
+
+  <h3>2b. End-customer lead data &mdash; we are a data processor</h3>
+  <p>
+    Data about the <em>business's own customers</em> &mdash; the people who
+    contacted a business (e.g. Vertex Property Care) through Google Local
+    Services Ads. This is not our data to decide the purpose of; we process
+    it strictly on the business's instructions, as their processor. The
+    business remains the data controller for their own customers' data.
+  </p>
+  <p>What's actually stored (confirmed directly against the current database schema, not estimated):</p>
+  <ul>
+    <li>Contact phone number</li>
+    <li>Message content / conversation text exchanged with the business</li>
+    <li>Call duration (used only to detect missed calls, not for content)</li>
+    <li>Lead type, status, and timestamps, sourced directly from Google's Local Services Ads platform via the Google Ads API &mdash; we never collect this directly from the end customer; it is synced from Google, where the end customer originally submitted it to the business.</li>
+  </ul>
+  <p>We never sell this data, use it for our own marketing, or use it for any purpose beyond operating the service for the business that received the lead.</p>
+
+  <h2>3. Legal basis for processing</h2>
+  <ul>
+    <li><strong>Business account data</strong>: performance of a contract (providing the service you've signed up for).</li>
+    <li><strong>End-customer lead data</strong>: we process this under Article 28-style processor instructions from the business. Our lawful basis derives from the business's own lawful basis with their customer (typically legitimate interest or contract &mdash; e.g. responding to a quote enquiry), not a separate basis of our own.</li>
+  </ul>
+
+  <h2>4. Who else processes this data (sub-processors)</h2>
+  <ul>
+    <li><strong>Supabase</strong> (database, authentication, backend functions) &mdash; hosted in the EU (<code>eu-west-1</code>, Ireland), confirmed directly against the live project configuration.</li>
+    <li><strong>Google LLC</strong> &mdash; the original source of all end-customer lead data, via the Google Ads API. Google's own privacy terms govern their side of this.</li>
+    <li><strong>Resend</strong> &mdash; used to send email alerts (new-lead notifications, spend/compliance alerts) to the business. These emails can contain lead contact details. <span class="tbd">TO CONFIRM</span>: Resend's data residency and whether an adequate international-transfer mechanism (e.g. SCCs) is in place has not been independently verified &mdash; check Resend's own DPA/subprocessor terms before treating this as settled.</li>
+    <li><strong>GitHub Pages</strong> &mdash; hosts only the static dashboard frontend (HTML/JS/CSS). It never receives or stores lead data itself; the dashboard talks directly to Supabase from the browser.</li>
+  </ul>
+
+  <h2>5. Where data is hosted</h2>
+  <p>Primary database and backend: Supabase, <code>eu-west-1</code> (Ireland) &mdash; confirmed directly, not assumed.</p>
+
+  <h2>6. Data retention</h2>
+  <p>
+    <strong>Policy commitment</strong>: end-customer lead data is retained for
+    <strong>90 days after a business disconnects</strong> from LSA Companion
+    (<code>businesses.status = 'disconnected'</code>), then permanently deleted.
+  </p>
+  <p>
+    <strong>Enforced as of 2026-08-20.</strong> A daily job
+    (<code>purge_disconnected_business_data()</code>, scheduled via Supabase
+    Cron at 03:00 UTC) deletes <code>leads</code> rows &mdash; and their
+    associated messages, via cascade &mdash; for any business disconnected
+    more than 90 days. The business's own account row is not deleted, only
+    its former customers' lead data. Verified with synthetic test data
+    (never real customer data): a business disconnected 100 days ago had
+    its lead correctly purged (cascade-deleting the message too), a
+    business disconnected only 10 days ago was correctly left untouched,
+    and an audit record (<code>data_retention_purges</code>) was correctly
+    created for the purge and correctly absent for the non-purge. Real
+    Vertex data confirmed untouched throughout.
+  </p>
+
+  <h2>7. Security measures</h2>
+  <ul>
+    <li>Row-level security (RLS) on every table holding business or lead data, scoped to <code>business_members</code> &mdash; a user can only ever see data for businesses they belong to.</li>
+    <li>Google account refresh tokens are never stored in plain text &mdash; encrypted at rest via Supabase Vault, accessed only through a locked-down <code>security definer</code> function.</li>
+    <li>All traffic over HTTPS.</li>
+    <li>No personal data is placed in URL query strings or logs by design.</li>
+  </ul>
+
+  <h2>8. Data subject rights</h2>
+  <p>
+    If you are an end customer who contacted a business via Google Local
+    Services Ads, and that business uses LSA Companion: the business you
+    contacted is the correct first point of contact for any request to
+    access, correct, or delete your data, since they are the data
+    controller. If you contact us directly, we will support that request
+    and relay/action it in coordination with the relevant business, as
+    required of a processor.
+  </p>
+  <p>
+    If you are a business using LSA Companion directly: contact
+    <a href="mailto:enpee.sides@gmail.com">enpee.sides@gmail.com</a> for any
+    request regarding your own account data.
+  </p>
+
+  <h2>9. International transfers</h2>
+  <p>
+    Primary hosting (Supabase) is within the EU. Google (source data) and
+    Resend (email delivery) are separate processors with their own
+    international-transfer position &mdash; see section 4's
+    <span class="tbd">TO CONFIRM</span> note on Resend specifically before
+    relying on this section as complete.
+  </p>
+
+  <h2>10. Changes to this policy</h2>
+  <p>This is a draft. A real version history will be added once this document is actually reviewed and published.</p>
+
+  <footer>
+    <a class="back" href="about.html">&larr; Back to LSA Companion</a>
+  </footer>
+</div>
+</body>
+</html>
