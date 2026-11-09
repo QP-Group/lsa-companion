@@ -1911,3 +1911,54 @@ second real business, not before.
 actually survives past 7 days. Won't be fully certain until this is
 checked again after 2026-11-16 and `pipeline_health_status` shows no
 gap — flagged honestly rather than declared solved on theory alone.
+
+## Reply-send failure investigated: a real Google-side block, not a bug — 2026-11-09
+
+User hit "Failed to send" trying to manually reply to a lead
+(+447375357191, call-originated 2026-11-03) from the dashboard.
+
+**First real use of the project's log pipeline for this kind of
+debugging**: the dashboard was only showing `send-reply`'s generic
+`result.error` string and silently dropping `result.detail`, so the
+actual cause wasn't visible anywhere — not in the UI, and not server-
+side either, since the function returns the Google error in the
+response body but never logs it. Fixed first: dashboard now shows
+`result.detail` and logs it to console (both `docs/index.html` and
+`site/dashboard.html`, kept in sync). Separately, used the Supabase
+Management API's logs endpoint (`/v1/projects/{ref}/analytics/endpoints/logs`,
+`function_edge_logs` source) for the first time in this project to
+independently confirm the exact failed request: a real `502` from
+`send-reply` at `2026-11-09T11:57:11 UTC`, isolated from the healthy
+`200`s on every other scheduled function around it — confirmed this
+wasn't the pipeline breaking again before going further.
+
+**Real error once surfaced**: Google's own `INTERNAL_ERROR` (gRPC code
+13, "An internal error occurred") from `appendLeadConversation` — a
+generic server-side fault code, not a specific documented rejection.
+
+**A wrong theory, caught and corrected rather than left standing**:
+first guessed this was because the lead's top-level `lead_type` is
+`PHONE_CALL`, not `MESSAGE` (the type of the one lead that's
+successfully gotten an automated reply so far) — based on a web search
+result claiming Google's API only accepts `MESSAGE`-type leads for
+this call. Checked that claim directly against Google's own current
+`Conversation` reference docs (v25 and v23) before accepting it: **the
+claim doesn't appear anywhere in the actual docs**, and the user
+independently falsified it anyway by confirming Google's Local
+Services app itself used to allow texting phone-call leads. Retracted
+rather than left uncorrected.
+
+**Real answer, confirmed independently of our code entirely**: at the
+user's suggestion, tried replying to this exact lead from Google's own
+LSA inbox directly — **it refused there too**. This proves the block
+is on Google's side of this specific lead, not a bug in `send-reply`
+or the dashboard. Most likely explanation (not confirmed against any
+documented rule): a closed reply window on a lead that's six days old
+and call-originated, but the precise policy isn't publicly documented
+anywhere found. No code fix needed or applied beyond the error-surfacing
+improvement above, which is now genuinely useful for the next time this
+happens on a different lead.
+
+**Real consequence for the user**: this customer needs a different
+contact route (WhatsApp or similar) outside the tool — not something
+LSA Companion can route around, since the block is upstream at Google.
